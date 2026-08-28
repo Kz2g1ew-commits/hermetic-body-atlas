@@ -93,16 +93,16 @@ const parts = [
   },
   {
     id: 'male-genitals', number: '12', name: '남성 생식기', subtitle: '앞면 전기 / 내부 자기 / 나머지 중성', latin: 'GENITALIA MASCULINA', symbol: '♂',
-    target: [0, -.34, .25], camera: [0, -.3, 3.1], electric: 20, magnetic: 20, neutral: 60,
+    target: [0, -.34, .25], camera: [1.35, -.26, 2.8], electric: 20, magnetic: 20, neutral: 60,
     summary: '남성 생식기의 앞면은 전기적, 내부는 자기적이며 뒷면과 오른쪽·왼쪽은 중성으로 분류됩니다.',
-    flow: '전기: 앞 · 자기: 내부 · 중성: 뒤·오른쪽·왼쪽.',
+    flow: '앞면의 빨간 전기 극에서 발산하여 내부의 파란 자기 극으로 수렴합니다. 중성: 뒤·오른쪽·왼쪽.',
     element: '앞·뒤·좌·우·내부', action: '전기 1 / 자기 1 / 중성 3'
   },
   {
     id: 'female-genitals', number: '13', name: '여성 생식기', subtitle: '앞면 자기 / 내부 전기 / 나머지 중성', latin: 'GENITALIA FEMININA', symbol: '♀',
-    target: [0, -.34, .25], camera: [0, -.3, 3.1], electric: 20, magnetic: 20, neutral: 60,
+    target: [0, -.34, .25], camera: [1.35, -.26, 2.8], electric: 20, magnetic: 20, neutral: 60,
     summary: '여성 생식기의 앞면은 자기적, 내부는 전기적이며 뒷면과 오른쪽·왼쪽은 중성으로 분류됩니다.',
-    flow: '자기: 앞 · 전기: 내부 · 중성: 뒤·오른쪽·왼쪽.',
+    flow: '내부의 빨간 전기 극에서 발산하여 앞면의 파란 자기 극으로 수렴합니다. 중성: 뒤·오른쪽·왼쪽.',
     element: '앞·뒤·좌·우·내부', action: '전기 1 / 자기 1 / 중성 3'
   },
   {
@@ -423,8 +423,8 @@ async function loadMakeHumanAnatomy() {
   setModelView('right-fingers', [-1.94, .54, .86], [-1.94, .56, 3.35]);
   setModelView('left-fingers', [1.94, .54, .86], [1.94, .56, 3.35]);
   setModelView('feet', [0, -3.28, .48], [0, -3.23, 5.1]);
-  setModelView('male-genitals', [0, -.34, .25], [0, -.31, 3.1]);
-  setModelView('female-genitals', [0, -.34, .25], [0, -.31, 3.1]);
+  setModelView('male-genitals', [0, -.34, .25], [1.35, -.26, 2.8]);
+  setModelView('female-genitals', [0, -.34, .25], [1.35, -.26, 2.8]);
   setModelView('coccyx', [0, -.4, -.34], [0, -.36, -3.1]);
 
   polarityZones.eyes.centers = eyeCenters.map(center => center.toArray());
@@ -608,20 +608,29 @@ const polarityZones = {
 const neutralMat = new THREE.MeshBasicMaterial({ color: 0xcabe97, transparent: true, opacity: .42, depthWrite: false });
 let handedness = 'right';
 const focusFilingMaterials = [];
+const focusFlowParticles = [];
 const wholeFilingMaterials = [];
 
-function makePolarityMarker(kind, direction, center, radii, scale = 1, opacityScale = 1) {
-  const material = kind === 'e' ? redMat.clone() : kind === 'm' ? blueMat.clone() : neutralMat.clone();
-  material.opacity = (kind === 'n' ? .35 : .78) * opacityScale;
-  material.depthTest = kind === 'n';
-  const group = new THREE.Group();
-  const core = new THREE.Mesh(new THREE.SphereGeometry(.019, 12, 10), material);
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(.039, .0025, 6, 32), material.clone());
+function positionForDirection(center, radii, direction) {
   const [rx, ry, rz] = radii;
   const offset = {
     front: [0, 0, rz], back: [0, 0, -rz], left: [rx, 0, 0], right: [-rx, 0, 0], inside: [0, 0, 0]
   }[direction];
-  group.position.set(center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]);
+  return new THREE.Vector3(center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]);
+}
+
+function makePolarityMarker(kind, direction, center, radii, scale = 1, opacityScale = 1) {
+  const material = kind === 'e' ? redMat.clone() : kind === 'm' ? blueMat.clone() : neutralMat.clone();
+  material.opacity = (kind === 'n' ? .35 : .92) * opacityScale;
+  material.blending = THREE.NormalBlending;
+  material.depthTest = kind === 'n';
+  const group = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(.028, 14, 12), material);
+  const haloMaterial = material.clone();
+  haloMaterial.blending = THREE.AdditiveBlending;
+  haloMaterial.opacity *= .78;
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(.052, .003, 6, 36), haloMaterial);
+  group.position.copy(positionForDirection(center, radii, direction));
   if (direction === 'left' || direction === 'right') halo.rotation.y = Math.PI / 2;
   if (direction === 'inside') { core.scale.setScalar(1.15); halo.scale.setScalar(.72); }
   group.scale.setScalar(scale);
@@ -652,79 +661,122 @@ function clearGeneratedGroup(group) {
   group.clear();
 }
 
-function addDipoleFilings(center, radius, hasElectric, hasMagnetic) {
+function addFilingSegments(positions, kind) {
+  if (!positions.length) return;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: kind === 'e' ? 0xff5347 : 0x35aaff,
+    transparent: true, opacity: .46, blending: THREE.AdditiveBlending,
+    depthWrite: false, depthTest: false
+  });
+  const filings = new THREE.LineSegments(geometry, material);
+  (kind === 'e' ? focusElectricFilings : focusMagneticFilings).add(filings);
+  focusFilingMaterials.push({ material, phase: kind === 'e' ? 0 : Math.PI });
+}
+
+function addFlowParticle(curve, kind, from, to, offset, radius) {
+  const material = (kind === 'e' ? redMat : blueMat).clone();
+  material.opacity = .92;
+  material.depthTest = false;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(Math.max(.009, radius * .026), 9, 8), material);
+  (kind === 'e' ? focusElectricFilings : focusMagneticFilings).add(mesh);
+  focusFlowParticles.push({ mesh, curve, kind, from, to, offset, speed: .24 });
+}
+
+function addPoleConnection(electricPole, magneticPole, radius, seed = 0) {
+  const delta = magneticPole.clone().sub(electricPole);
+  const distance = delta.length();
+  if (distance < .018) return;
+  const axis = delta.clone().normalize();
+  const reference = Math.abs(axis.y) < .82 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  const basisU = new THREE.Vector3().crossVectors(axis, reference).normalize();
+  const basisV = new THREE.Vector3().crossVectors(axis, basisU).normalize();
   const redSegments = [], blueSegments = [];
-  const loopCount = 8;
-  const shellCount = 3;
-  for (let plane = 0; plane < loopCount; plane++) {
-    const phi = plane / loopCount * Math.PI * 2;
-    for (let shell = 0; shell < shellCount; shell++) {
-      const loopRadius = radius * (1.25 + shell * .34);
-      const steps = 30;
-      for (let step = 1; step < steps - 2; step += 2) {
-        const theta = .18 + step / steps * (Math.PI - .36);
-        const theta2 = theta + (Math.PI - .36) / steps * .62;
-        const pointAt = angle => {
-          const radial = loopRadius * Math.sin(angle) ** 2;
-          return new THREE.Vector3(
-            radial * Math.cos(angle),
-            radial * Math.sin(angle) * Math.cos(phi),
-            radial * Math.sin(angle) * Math.sin(phi)
-          ).add(new THREE.Vector3(...center));
-        };
-        const output = theta < Math.PI / 2 ? redSegments : blueSegments;
-        output.push(...pointAt(theta), ...pointAt(theta2));
-      }
+  const lineCount = 12;
+  for (let line = 0; line < lineCount; line++) {
+    const angle = line / lineCount * Math.PI * 2 + seed * .71;
+    const radial = basisU.clone().multiplyScalar(Math.cos(angle)).addScaledVector(basisV, Math.sin(angle));
+    const bulge = Math.max(radius * (.52 + (line % 3) * .13), distance * .38);
+    const control1 = electricPole.clone().addScaledVector(axis, distance * .2).addScaledVector(radial, bulge);
+    const control2 = magneticPole.clone().addScaledVector(axis, -distance * .2).addScaledVector(radial, bulge);
+    const curve = new THREE.CubicBezierCurve3(electricPole, control1, control2, magneticPole);
+    const steps = 32;
+    for (let step = 0; step < steps; step += 2) {
+      const startT = step / steps;
+      const endT = Math.min(1, (step + .78) / steps);
+      const output = (startT + endT) * .5 < .5 ? redSegments : blueSegments;
+      output.push(...curve.getPointAt(startT), ...curve.getPointAt(endT));
+    }
+    if (line % 3 === 0) {
+      const offset = line / lineCount;
+      addFlowParticle(curve, 'e', .015, .49, offset, radius);
+      addFlowParticle(curve, 'm', .51, .985, offset, radius);
     }
   }
-  const createSegments = (positions, color, layer, phase) => {
-    if (!positions.length) return;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const material = new THREE.LineBasicMaterial({
-      color, transparent: true, opacity: .42, blending: THREE.AdditiveBlending, depthWrite: false
-    });
-    const filings = new THREE.LineSegments(geometry, material);
-    layer.add(filings);
-    focusFilingMaterials.push({ material, phase });
-  };
-  if (hasElectric && hasMagnetic) {
-    createSegments(redSegments, 0xff5347, focusElectricFilings, 0);
-    createSegments(blueSegments, 0x35aaff, focusMagneticFilings, Math.PI);
-  } else {
-    const kind = hasElectric ? 'e' : 'm';
-    const positions = [];
-    const directions = 72;
-    for (let i = 0; i < directions; i++) {
-      const u = (i + .5) / directions;
-      const phi = Math.acos(1 - 2 * u);
-      const theta = i * 2.399963;
-      const direction = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
-      const distance = radius * (1.05 + (i % 4) * .16);
-      const length = radius * (.14 + (i % 3) * .025);
-      const start = direction.clone().multiplyScalar(distance).add(new THREE.Vector3(...center));
-      const end = direction.clone().multiplyScalar(distance + length).add(new THREE.Vector3(...center));
-      positions.push(...start, ...end);
+  addFilingSegments(redSegments, 'e');
+  addFilingSegments(blueSegments, 'm');
+}
+
+function addRadialPoleFlow(pole, radius, kind) {
+  const segments = [];
+  const directions = 48;
+  for (let i = 0; i < directions; i++) {
+    const u = (i + .5) / directions;
+    const phi = Math.acos(1 - 2 * u);
+    const theta = i * 2.399963;
+    const direction = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
+    for (let dash = 0; dash < 4; dash++) {
+      const startDistance = radius * (.24 + dash * .34 + (i % 3) * .025);
+      const endDistance = startDistance + radius * .16;
+      segments.push(
+        ...pole.clone().addScaledVector(direction, startDistance),
+        ...pole.clone().addScaledVector(direction, endDistance)
+      );
     }
-    createSegments(
-      positions,
-      kind === 'e' ? 0xff5347 : 0x35aaff,
-      kind === 'e' ? focusElectricFilings : focusMagneticFilings,
-      kind === 'e' ? 0 : Math.PI
-    );
+    if (i % 6 === 0) {
+      const curve = new THREE.LineCurve3(
+        pole.clone().addScaledVector(direction, radius * .16),
+        pole.clone().addScaledVector(direction, radius * 1.48)
+      );
+      addFlowParticle(curve, kind, kind === 'e' ? 0 : 1, kind === 'e' ? 1 : 0, i / directions, radius);
+    }
   }
+  addFilingSegments(segments, kind);
 }
 
 function rebuildFocusFilings(part) {
   clearGeneratedGroup(focusElectricFilings);
   clearGeneratedGroup(focusMagneticFilings);
   focusFilingMaterials.length = 0;
+  focusFlowParticles.length = 0;
   const zones = polarityZones[part.id];
   if (!zones || part.id === 'whole') return;
   const instances = zoneInstances(part, zones);
   instances.forEach(instance => {
     const radius = Math.max(...zones.radius) * (instances.length > 1 ? 1.35 : 1.15);
-    addDipoleFilings(instance.center, radius, instance.e.length > 0, instance.m.length > 0);
+    const electricPoles = instance.e.map(direction => positionForDirection(instance.center, zones.radius, direction));
+    const magneticPoles = instance.m.map(direction => positionForDirection(instance.center, zones.radius, direction));
+    if (electricPoles.length && magneticPoles.length) {
+      const reachedMagneticPoles = new Set();
+      electricPoles.forEach((electricPole, index) => {
+        const candidates = magneticPoles.filter(pole => pole.distanceTo(electricPole) >= .018);
+        if (!candidates.length) return;
+        const magneticPole = candidates.reduce((nearest, pole) =>
+          pole.distanceTo(electricPole) < nearest.distanceTo(electricPole) ? pole : nearest
+        );
+        reachedMagneticPoles.add(magneticPole);
+        addPoleConnection(electricPole, magneticPole, radius, index);
+      });
+      magneticPoles.forEach((magneticPole, index) => {
+        if (reachedMagneticPoles.has(magneticPole)) return;
+        const candidates = electricPoles.filter(pole => pole.distanceTo(magneticPole) >= .018);
+        if (candidates.length) addPoleConnection(candidates[0], magneticPole, radius, index + 5);
+      });
+    } else {
+      electricPoles.forEach(pole => addRadialPoleFlow(pole, radius * .82, 'e'));
+      magneticPoles.forEach(pole => addRadialPoleFlow(pole, radius * .82, 'm'));
+    }
   });
 }
 
@@ -979,6 +1031,15 @@ function animate(now) {
     p.mesh.position.copy(p.curve.getPointAt(t));
     const pulse = .75 + Math.sin(elapsed * 5 + p.offset * 10) * .25; p.mesh.scale.setScalar(pulse);
   });
+  focusFlowParticles.forEach(particle => {
+    const progress = ((elapsed * particle.speed + particle.offset) % 1 + 1) % 1;
+    const t = particle.from + (particle.to - particle.from) * progress;
+    particle.mesh.position.copy(particle.curve.getPointAt(t));
+    particle.mesh.scale.setScalar(.72 + Math.sin(elapsed * 6 + particle.offset * 12) * .22);
+  });
+  const polePulse = (Math.sin(elapsed * 3.1) + 1) * .5;
+  focusElectricLayer.children.forEach(marker => marker.scale.setScalar(.94 + polePulse * .18));
+  focusMagneticLayer.children.forEach(marker => marker.scale.setScalar(1.12 - polePulse * .16));
   focusFilingMaterials.forEach(({ material, phase }) => {
     material.opacity = .34 + Math.sin(elapsed * 2.8 + phase) * .12;
   });
