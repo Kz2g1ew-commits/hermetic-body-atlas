@@ -684,7 +684,7 @@ function addFlowParticle(curve, kind, from, to, offset, radius) {
   focusFlowParticles.push({ mesh, curve, kind, from, to, offset, speed: .24 });
 }
 
-function addPoleConnection(electricPole, magneticPole, radius, seed = 0) {
+function addPoleConnection(electricPole, magneticPole, radius, seed = 0, lineCount = 12) {
   const delta = magneticPole.clone().sub(electricPole);
   const distance = delta.length();
   if (distance < .018) return;
@@ -693,7 +693,6 @@ function addPoleConnection(electricPole, magneticPole, radius, seed = 0) {
   const basisU = new THREE.Vector3().crossVectors(axis, reference).normalize();
   const basisV = new THREE.Vector3().crossVectors(axis, basisU).normalize();
   const redSegments = [], blueSegments = [];
-  const lineCount = 12;
   for (let line = 0; line < lineCount; line++) {
     const angle = line / lineCount * Math.PI * 2 + seed * .71;
     const radial = basisU.clone().multiplyScalar(Math.cos(angle)).addScaledVector(basisV, Math.sin(angle));
@@ -708,7 +707,7 @@ function addPoleConnection(electricPole, magneticPole, radius, seed = 0) {
       const output = (startT + endT) * .5 < .5 ? redSegments : blueSegments;
       output.push(...curve.getPointAt(startT), ...curve.getPointAt(endT));
     }
-    if (line % 3 === 0) {
+    if (line % Math.max(3, Math.ceil(lineCount / 3)) === 0) {
       const offset = line / lineCount;
       addFlowParticle(curve, 'e', .015, .49, offset, radius);
       addFlowParticle(curve, 'm', .51, .985, offset, radius);
@@ -720,21 +719,21 @@ function addPoleConnection(electricPole, magneticPole, radius, seed = 0) {
 
 function addRadialPoleFlow(pole, radius, kind) {
   const segments = [];
-  const directions = 48;
+  const directions = 32;
   for (let i = 0; i < directions; i++) {
     const u = (i + .5) / directions;
     const phi = Math.acos(1 - 2 * u);
     const theta = i * 2.399963;
     const direction = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
-    for (let dash = 0; dash < 4; dash++) {
-      const startDistance = radius * (.24 + dash * .34 + (i % 3) * .025);
+    for (let dash = 0; dash < 3; dash++) {
+      const startDistance = radius * (.24 + dash * .42 + (i % 3) * .025);
       const endDistance = startDistance + radius * .16;
       segments.push(
         ...pole.clone().addScaledVector(direction, startDistance),
         ...pole.clone().addScaledVector(direction, endDistance)
       );
     }
-    if (i % 6 === 0) {
+    if (i % 8 === 0) {
       const curve = new THREE.LineCurve3(
         pole.clone().addScaledVector(direction, radius * .16),
         pole.clone().addScaledVector(direction, radius * 1.48)
@@ -743,6 +742,27 @@ function addRadialPoleFlow(pole, radius, kind) {
     }
   }
   addFilingSegments(segments, kind);
+}
+
+function centroidOf(poles) {
+  return poles.reduce((centroid, pole) => centroid.add(pole), new THREE.Vector3()).multiplyScalar(1 / poles.length);
+}
+
+function addAggregatePolarFlow(electricPoles, magneticPoles, radius) {
+  const electricCenter = centroidOf(electricPoles);
+  const magneticCenter = centroidOf(magneticPoles);
+  if (electricCenter.distanceTo(magneticCenter) >= radius * .14) {
+    addPoleConnection(electricCenter, magneticCenter, radius * .9, 0, 6);
+    return;
+  }
+
+  // Symmetric layouts such as each eye have coincident aggregate centers.
+  // Keep one restrained fan per outer electric pole and converge on the shared magnetic center.
+  electricPoles.forEach((electricPole, index) => {
+    if (electricPole.distanceTo(magneticCenter) >= .018) {
+      addPoleConnection(electricPole, magneticCenter, radius * .62, index, 3);
+    }
+  });
 }
 
 function rebuildFocusFilings(part) {
@@ -758,24 +778,14 @@ function rebuildFocusFilings(part) {
     const electricPoles = instance.e.map(direction => positionForDirection(instance.center, zones.radius, direction));
     const magneticPoles = instance.m.map(direction => positionForDirection(instance.center, zones.radius, direction));
     if (electricPoles.length && magneticPoles.length) {
-      const reachedMagneticPoles = new Set();
-      electricPoles.forEach((electricPole, index) => {
-        const candidates = magneticPoles.filter(pole => pole.distanceTo(electricPole) >= .018);
-        if (!candidates.length) return;
-        const magneticPole = candidates.reduce((nearest, pole) =>
-          pole.distanceTo(electricPole) < nearest.distanceTo(electricPole) ? pole : nearest
-        );
-        reachedMagneticPoles.add(magneticPole);
-        addPoleConnection(electricPole, magneticPole, radius, index);
-      });
-      magneticPoles.forEach((magneticPole, index) => {
-        if (reachedMagneticPoles.has(magneticPole)) return;
-        const candidates = electricPoles.filter(pole => pole.distanceTo(magneticPole) >= .018);
-        if (candidates.length) addPoleConnection(candidates[0], magneticPole, radius, index + 5);
-      });
+      if (electricPoles.length === 1 && magneticPoles.length === 1) {
+        addPoleConnection(electricPoles[0], magneticPoles[0], radius);
+      } else {
+        addAggregatePolarFlow(electricPoles, magneticPoles, radius);
+      }
     } else {
-      electricPoles.forEach(pole => addRadialPoleFlow(pole, radius * .82, 'e'));
-      magneticPoles.forEach(pole => addRadialPoleFlow(pole, radius * .82, 'm'));
+      if (electricPoles.length) addRadialPoleFlow(centroidOf(electricPoles), radius * .82, 'e');
+      if (magneticPoles.length) addRadialPoleFlow(centroidOf(magneticPoles), radius * .82, 'm');
     }
   });
 }
@@ -838,9 +848,10 @@ function updateFocusPolarity(part) {
     return;
   }
   zoneInstances(part, zones).forEach(instance => {
+    const markerScale = instance.e.length + instance.m.length > 2 ? .58 : 1;
     addInstanceMarkers(instance, zones.radius, {
       e: focusElectricLayer, m: focusMagneticLayer, n: focusNeutralLayer
-    });
+    }, markerScale);
   });
   rebuildFocusFilings(part);
 }
