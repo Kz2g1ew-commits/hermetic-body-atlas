@@ -48,6 +48,18 @@
             <button data-handedness="left" aria-pressed="false">왼손잡이</button>
           </div>
 
+          <div class="flow-layout-switch" role="group" aria-label="흐름 표현 방식">
+            <span>흐름 방식</span>
+            <button data-flow-layout="aggregate" class="active" aria-pressed="true">통합 흐름</button>
+            <button data-flow-layout="alternating" aria-pressed="false">교대 노드</button>
+          </div>
+
+          <div class="ear-interpretation-switch" role="group" aria-label="귀의 좌우 해석" aria-hidden="true">
+            <span>귀 해석</span>
+            <button data-ear-interpretation="surface" class="active" aria-pressed="true">방향면</button>
+            <button data-ear-interpretation="organs" aria-pressed="false">좌우 기관</button>
+          </div>
+
           <div class="part-heading"><span>신체 부위</span><small>SELECT A REGION</small></div>
           <nav class="part-list" id="part-list" aria-label="신체 부위 선택"></nav>
         </aside>
@@ -111,9 +123,9 @@
       <button id="close-help" aria-label="닫기">×</button>
       <div class="eyebrow">HOW TO EXPLORE</div>
       <h2>인체의 장을 탐색하는 법</h2>
-      <p>왼쪽에서 부위를 선택하거나 3D 인체를 직접 누르면 카메라가 해당 메시 중심으로 이동합니다. 붉은색은 전기 유체, 푸른색은 자기 유체, 금색은 중성 구획입니다. 선택 부위의 움직이는 점은 빨간 극에서 발산해 파란 극으로 들어갑니다. ‘전신 함께’는 모든 부위의 표식을 조합하며, 우세손을 바꾸면 전신의 좌우 전기·자기 극성이 반전됩니다.</p>
+      <p>왼쪽에서 부위를 선택하거나 3D 인체를 직접 누르면 카메라가 해당 메시 중심으로 이동합니다. 붉은색은 전기 유체, 푸른색은 자기 유체, 금색은 중성 구획입니다. 선택 부위의 움직이는 점은 빨간 극에서 발산해 파란 극으로 들어갑니다. ‘통합 흐름’은 여러 극을 한 장으로 묶고, ‘교대 노드’는 중성점을 제외한 실제 빨강·파랑 표식을 번갈아 연결합니다. ‘전신 함께’는 모든 부위의 표식을 조합하며, 우세손을 바꾸면 전신의 좌우 전기·자기 극성이 반전됩니다.</p>
       <div class="help-keys"><span><b>DRAG</b> 회전</span><span><b>SCROLL</b> 확대</span><span><b>CLICK</b> 부위 선택</span></div>
-      <p class="help-source">부위별 극성은 프란츠 바르돈의 『헤르메스학 입문』 이론부 ‘인체의 오컬트 해부학’을 기준으로 옮겼습니다. 우세손 전환은 전신의 좌우 극성에 적용되며, 부위별 표의 방향 구획은 그대로 유지됩니다. 방사와 수렴 애니메이션은 책에서 설명한 전기 유체의 팽창과 자기 유체의 수축을 공간적으로 읽기 위한 표현입니다.</p>
+      <p class="help-source">부위별 극성은 프란츠 바르돈의 『헤르메스학 입문』 이론부 ‘인체의 오컬트 해부학’을 기준으로 옮겼습니다. 독일어 원문의 귀 항목은 ‘오른쪽/왼쪽 면’이라는 다섯 방향 형식을 쓰지만 복수 기관 문맥에서는 오른쪽 귀/왼쪽 귀라는 독해도 가능합니다. 그래서 형식에 충실한 ‘방향면’을 기본값으로 두고 ‘좌우 기관’을 비교 보기로 함께 제공합니다. 방사와 수렴 애니메이션 및 연결선은 팽창과 수축을 공간적으로 읽기 위한 인터페이스 표현입니다.</p>
     </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -435,15 +435,11 @@ async function loadMakeHumanAnatomy() {
   polarityZones['left-fingers'].centers = [[1.94,.54,.86]];
   polarityZones.feet.centers = [[-.9,-3.32,.48],[.9,-3.32,.48]];
   const [rightEye, leftEye] = [...eyeCenters].sort((a, b) => a.x - b.x).map(center => center.toArray());
-  const [rightEar, leftEar] = [...earCenters].sort((a, b) => a.x - b.x).map(center => center.toArray());
   polarityZones.eyes.instances = [
     { center: rightEye, e: ['right','left'], m: ['inside'], n: ['front','back'] },
     { center: leftEye, e: ['right','left'], m: ['inside'], n: ['front','back'] }
   ];
-  polarityZones.ears.instances = [
-    { center: rightEar, e: ['left'], m: ['right'], n: ['front','back','inside'] },
-    { center: leftEar, e: ['left'], m: ['right'], n: ['front','back','inside'] }
-  ];
+  configureEarInstances();
   polarityZones.hands.instances = [
     { center: [-1.76,.78,.57], e: ['left'], m: ['right'], n: ['front','back','inside'] },
     { center: [1.76,.78,.57], e: ['left'], m: ['right'], n: ['front','back','inside'] }
@@ -607,6 +603,8 @@ const polarityZones = {
 };
 const neutralMat = new THREE.MeshBasicMaterial({ color: 0xcabe97, transparent: true, opacity: .42, depthWrite: false });
 let handedness = 'right';
+let flowLayout = 'aggregate';
+let earInterpretation = 'surface';
 const focusFilingMaterials = [];
 const focusFlowParticles = [];
 const wholeFilingMaterials = [];
@@ -643,6 +641,42 @@ function zoneInstances(part, zones) {
   return (zones.centers || [part.target]).map(center => ({
     center, e: zones.e, m: zones.m, n: zones.n
   }));
+}
+
+function configureEarInstances() {
+  const earZones = polarityZones.ears;
+  const [rightEar, leftEar] = [...earZones.centers].sort((a, b) => a[0] - b[0]);
+  if (!rightEar || !leftEar) return;
+  if (earInterpretation === 'organs') {
+    earZones.instances = [
+      { center: rightEar, e: [], m: ['right'], n: ['front','back','inside'] },
+      { center: leftEar, e: ['left'], m: [], n: ['front','back','inside'] }
+    ];
+    return;
+  }
+  earZones.instances = [
+    { center: rightEar, e: ['left'], m: ['right'], n: ['front','back','inside'] },
+    { center: leftEar, e: ['left'], m: ['right'], n: ['front','back','inside'] }
+  ];
+}
+
+function updateEarInterpretationCopy() {
+  const ear = parts.find(part => part.id === 'ears');
+  if (earInterpretation === 'organs') {
+    ear.subtitle = '비교 가설 · 왼쪽 귀 전기 / 오른쪽 귀 자기';
+    ear.summary = '비교 보기에서는 왼쪽 귀를 전기적, 오른쪽 귀를 자기적으로 읽고 각 귀의 외측에 대표 노드를 둡니다. 이는 원문의 방향면 분류와 구분한 해석 가설입니다.';
+    ear.flow = '비교 가설: 왼쪽 귀의 빨간 대표 전기 극에서 오른쪽 귀의 파란 대표 자기 극으로 흐릅니다. 양쪽 귀의 앞·뒤·내부는 중성으로 둡니다.';
+    ear.electric = 12.5; ear.magnetic = 12.5; ear.neutral = 75;
+    ear.element = '좌우 귀 대표점 · 앞·뒤·내부';
+    ear.action = '전기 1 / 자기 1 / 중성 6';
+    return;
+  }
+  ear.subtitle = '앞·뒤·내부 중성 / 왼쪽 전기 / 오른쪽 자기';
+  ear.summary = '귀의 앞면과 뒷면, 내부는 중성이며 왼쪽 면은 전기적, 오른쪽 면은 자기적으로 분류됩니다.';
+  ear.flow = '중성: 앞·뒤·내부 · 전기: 왼쪽 면 · 자기: 오른쪽 면.';
+  ear.electric = 20; ear.magnetic = 20; ear.neutral = 60;
+  ear.element = '앞·뒤·좌·우·내부';
+  ear.action = '전기 1 / 자기 1 / 중성 3';
 }
 
 function addInstanceMarkers(instance, radii, layers, scale = 1, opacityScale = 1) {
@@ -765,6 +799,58 @@ function addAggregatePolarFlow(electricPoles, magneticPoles, radius) {
   });
 }
 
+function addAlternatingNodeFlow(electricPoles, magneticPoles, radius) {
+  const electricNodes = electricPoles.map((position, index) => ({ kind: 'e', position, index }));
+  const magneticNodes = magneticPoles.map((position, index) => ({ kind: 'm', position, index }));
+  const remaining = {
+    e: [...electricNodes].sort((a, b) => a.position.x - b.position.x || a.position.z - b.position.z),
+    m: [...magneticNodes].sort((a, b) => a.position.x - b.position.x || a.position.z - b.position.z)
+  };
+  const all = { e: electricNodes, m: magneticNodes };
+  const recordedEdges = new Set();
+  let edgeSeed = 0;
+
+  function recordEdge(first, second) {
+    const electric = first.kind === 'e' ? first : second;
+    const magnetic = first.kind === 'm' ? first : second;
+    const key = `${electric.index}:${magnetic.index}`;
+    if (recordedEdges.has(key) || electric.position.distanceTo(magnetic.position) < .018) return;
+    recordedEdges.add(key);
+    addPoleConnection(electric.position, magnetic.position, radius * .38, edgeSeed++, 2);
+  }
+
+  function takeNearestOpposite(node, candidates) {
+    let nearestIndex = -1;
+    let nearestDistance = Infinity;
+    candidates.forEach((candidate, index) => {
+      const distance = node.position.distanceTo(candidate.position);
+      if (distance >= .018 && distance < nearestDistance) {
+        nearestIndex = index;
+        nearestDistance = distance;
+      }
+    });
+    return nearestIndex < 0 ? null : candidates.splice(nearestIndex, 1)[0];
+  }
+
+  let current = (remaining.e.length >= remaining.m.length ? remaining.e : remaining.m).shift();
+  while (current) {
+    const oppositeKind = current.kind === 'e' ? 'm' : 'e';
+    const next = takeNearestOpposite(current, remaining[oppositeKind]);
+    if (!next) break;
+    recordEdge(current, next);
+    current = next;
+  }
+
+  ['e', 'm'].forEach(kind => {
+    remaining[kind].forEach(node => {
+      const oppositeKind = kind === 'e' ? 'm' : 'e';
+      const candidates = [...all[oppositeKind]];
+      const nearest = takeNearestOpposite(node, candidates);
+      if (nearest) recordEdge(node, nearest);
+    });
+  });
+}
+
 function rebuildFocusFilings(part) {
   clearGeneratedGroup(focusElectricFilings);
   clearGeneratedGroup(focusMagneticFilings);
@@ -773,8 +859,25 @@ function rebuildFocusFilings(part) {
   const zones = polarityZones[part.id];
   if (!zones || part.id === 'whole') return;
   const instances = zoneInstances(part, zones);
+  const radius = Math.max(...zones.radius) * (instances.length > 1 ? 1.35 : 1.15);
+  if (flowLayout === 'alternating') {
+    const electricPoles = instances.flatMap(instance => instance.e.map(direction => positionForDirection(instance.center, zones.radius, direction)));
+    const magneticPoles = instances.flatMap(instance => instance.m.map(direction => positionForDirection(instance.center, zones.radius, direction)));
+    if (electricPoles.length && magneticPoles.length) {
+      addAlternatingNodeFlow(electricPoles, magneticPoles, radius);
+    } else {
+      if (electricPoles.length) addRadialPoleFlow(centroidOf(electricPoles), radius * .82, 'e');
+      if (magneticPoles.length) addRadialPoleFlow(centroidOf(magneticPoles), radius * .82, 'm');
+    }
+    return;
+  }
+  if (part.id === 'ears' && earInterpretation === 'organs') {
+    const electricPoles = instances.flatMap(instance => instance.e.map(direction => positionForDirection(instance.center, zones.radius, direction)));
+    const magneticPoles = instances.flatMap(instance => instance.m.map(direction => positionForDirection(instance.center, zones.radius, direction)));
+    addAggregatePolarFlow(electricPoles, magneticPoles, radius);
+    return;
+  }
   instances.forEach(instance => {
-    const radius = Math.max(...zones.radius) * (instances.length > 1 ? 1.35 : 1.15);
     const electricPoles = instance.e.map(direction => positionForDirection(instance.center, zones.radius, direction));
     const magneticPoles = instance.m.map(direction => positionForDirection(instance.center, zones.radius, direction));
     if (electricPoles.length && magneticPoles.length) {
@@ -883,7 +986,7 @@ function updateAnatomyFocus(partId) {
   if (atlasRegions) atlasRegions.material.opacity = focused && hasExactMesh ? .18 : .1;
   Object.entries(anatomicalPartMeshes).forEach(([region, meshes]) => meshes.forEach(mesh => {
     const isEyeSurface = mesh.userData.permanent || eyeMeshes.includes(mesh);
-    const isFocusedSurface = region === partId && (region !== 'ears' || mesh.userData.primaryFocus);
+    const isFocusedSurface = region === partId && (region !== 'ears' || earInterpretation === 'organs' || mesh.userData.primaryFocus);
     mesh.visible = focused ? isFocusedSurface : isEyeSurface;
     if (!mesh.material) return;
     if (mesh.name === 'Tongue_FMA_54640' || mesh.name === 'MakeHuman_Tongue') mesh.material.opacity = focused && partId === 'mouth' ? .9 : .16;
@@ -916,6 +1019,10 @@ function easeInOutCubic(t) { return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)
 function selectPart(id, animate = true) {
   const part = parts.find(p => p.id === id) || parts[0];
   activePart = part.id;
+  const earSwitch = document.querySelector('.ear-interpretation-switch');
+  const showEarInterpretation = part.id === 'ears';
+  earSwitch.classList.toggle('visible', showEarInterpretation);
+  earSwitch.setAttribute('aria-hidden', String(!showEarInterpretation));
   document.querySelectorAll('.part-button').forEach(b => b.classList.toggle('active', b.dataset.part === part.id));
   ui.number.textContent = part.number; ui.symbol.textContent = part.symbol; ui.latin.textContent = part.latin;
   ui.title.textContent = part.name; ui.summary.textContent = part.summary; ui.flow.textContent = part.flow;
@@ -928,8 +1035,9 @@ function selectPart(id, animate = true) {
   applyFieldScope();
   updateAnatomyFocus(part.id);
 
-  const endTarget = new THREE.Vector3(...part.target);
-  const endCamera = new THREE.Vector3(...part.camera);
+  const pairedEarView = part.id === 'ears' && earInterpretation === 'organs';
+  const endTarget = new THREE.Vector3(...(pairedEarView ? [0, part.target[1], part.target[2]] : part.target));
+  const endCamera = new THREE.Vector3(...(pairedEarView ? [0, part.target[1], part.target[2] + 3.45] : part.camera));
   if (animate) {
     controls.autoRotate = false;
     document.querySelector('#rotate-view').classList.remove('active');
@@ -975,6 +1083,29 @@ document.querySelectorAll('.handedness-switch button').forEach(button => button.
   rebuildWholeField();
   applyFieldScope();
   updateHandednessPresentation();
+}));
+document.querySelectorAll('.flow-layout-switch button').forEach(button => button.addEventListener('click', () => {
+  flowLayout = button.dataset.flowLayout;
+  document.querySelectorAll('.flow-layout-switch button').forEach(item => {
+    const active = item === button;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-pressed', String(active));
+  });
+  updateFocusPolarity(parts.find(part => part.id === activePart) || parts[0]);
+  applyFieldScope();
+}));
+document.querySelectorAll('.ear-interpretation-switch button').forEach(button => button.addEventListener('click', () => {
+  earInterpretation = button.dataset.earInterpretation;
+  document.querySelectorAll('.ear-interpretation-switch button').forEach(item => {
+    const active = item === button;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-pressed', String(active));
+  });
+  configureEarInstances();
+  updateEarInterpretationCopy();
+  rebuildWholeField();
+  selectPart('ears', false);
+  applyFieldScope();
 }));
 
 document.querySelector('#reset-view').addEventListener('click', () => selectPart('whole'));
@@ -1061,5 +1192,7 @@ function animate(now) {
   composer.render();
 }
 
+configureEarInstances();
+updateEarInterpretationCopy();
 updateHandednessPresentation();
 requestAnimationFrame(animate);
