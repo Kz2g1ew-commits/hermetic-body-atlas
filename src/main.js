@@ -164,11 +164,20 @@ world.add(anatomicalGroup);
 const focusElectricLayer = new THREE.Group();
 const focusMagneticLayer = new THREE.Group();
 const focusNeutralLayer = new THREE.Group();
+const focusElectricFilings = new THREE.Group();
+const focusMagneticFilings = new THREE.Group();
+const wholeElectricLayer = new THREE.Group();
+const wholeMagneticLayer = new THREE.Group();
+const wholeNeutralLayer = new THREE.Group();
 focusElectricLayer.userData.dynamicFocus = true;
 focusMagneticLayer.userData.dynamicFocus = true;
-electricGroup.add(focusElectricLayer);
-magneticGroup.add(focusMagneticLayer);
-world.add(focusNeutralLayer);
+focusElectricFilings.userData.dynamicFocus = true;
+focusMagneticFilings.userData.dynamicFocus = true;
+wholeElectricLayer.userData.aggregateField = true;
+wholeMagneticLayer.userData.aggregateField = true;
+electricGroup.add(focusElectricLayer, focusElectricFilings, wholeElectricLayer);
+magneticGroup.add(focusMagneticLayer, focusMagneticFilings, wholeMagneticLayer);
+world.add(focusNeutralLayer, wholeNeutralLayer);
 
 const bodyMaterial = new THREE.MeshPhysicalMaterial({
   color: 0x8cc5c1, roughness: 0.32, metalness: 0.05, transparent: true, opacity: 0.23,
@@ -333,8 +342,8 @@ async function loadMakeHumanAnatomy() {
 
   const tongueSource = source.getObjectByName('helper-tongue');
   const tongue = new THREE.Mesh(tongueSource.geometry.clone(), new THREE.MeshPhysicalMaterial({
-    color: 0xd85d70, emissive: 0x5b1826, emissiveIntensity: .55, roughness: .48,
-    transparent: true, opacity: .88, depthWrite: false, side: THREE.DoubleSide
+    color: 0xbda783, emissive: 0x46391f, emissiveIntensity: .28, roughness: .48,
+    transparent: true, opacity: .78, depthWrite: false, side: THREE.DoubleSide
   }));
   tongue.name = 'MakeHuman_Tongue';
   tongue.userData.partId = 'mouth';
@@ -425,11 +434,32 @@ async function loadMakeHumanAnatomy() {
   polarityZones['right-fingers'].centers = [[-1.94,.54,.86]];
   polarityZones['left-fingers'].centers = [[1.94,.54,.86]];
   polarityZones.feet.centers = [[-.9,-3.32,.48],[.9,-3.32,.48]];
+  const [rightEye, leftEye] = [...eyeCenters].sort((a, b) => a.x - b.x).map(center => center.toArray());
+  const [rightEar, leftEar] = [...earCenters].sort((a, b) => a.x - b.x).map(center => center.toArray());
+  polarityZones.eyes.instances = [
+    { center: rightEye, e: ['right','left'], m: ['inside'], n: ['front','back'] },
+    { center: leftEye, e: ['right','left'], m: ['inside'], n: ['front','back'] }
+  ];
+  polarityZones.ears.instances = [
+    { center: rightEar, e: ['left'], m: ['right'], n: ['front','back','inside'] },
+    { center: leftEar, e: ['left'], m: ['right'], n: ['front','back','inside'] }
+  ];
+  polarityZones.hands.instances = [
+    { center: [-1.76,.78,.57], e: ['left'], m: ['right'], n: ['front','back','inside'] },
+    { center: [1.76,.78,.57], e: ['left'], m: ['right'], n: ['front','back','inside'] }
+  ];
+  polarityZones.feet.instances = [
+    { center: [-.9,-3.32,.48], e: ['left'], m: ['right'], n: ['front','back','inside'] },
+    { center: [.9,-3.32,.48], e: ['left'], m: ['right'], n: ['front','back','inside'] }
+  ];
   auraNodes[3].position.set(-1.76, .78, .57);
   auraNodes[4].position.set(1.76, .78, .57);
   auraNodes[5].position.set(-.9, -3.32, .48);
   auraNodes[6].position.set(.9, -3.32, .48);
 
+  rebuildWholeField();
+  updateFocusPolarity(parts.find(part => part.id === activePart) || parts[0]);
+  applyFieldScope();
   updateAnatomyFocus(activePart);
   document.querySelector('#loading').classList.add('done');
 }
@@ -576,9 +606,14 @@ const polarityZones = {
   coccyx: { e: [], m: ['inside'], n: ['front','back','left','right'], radius: [.24,.24,.2], centers: [[0,-.4,-.34]] }
 };
 const neutralMat = new THREE.MeshBasicMaterial({ color: 0xcabe97, transparent: true, opacity: .42, depthWrite: false });
-function makePolarityMarker(kind, direction, center, radii) {
+let handedness = 'right';
+const focusFilingMaterials = [];
+const wholeFilingMaterials = [];
+
+function makePolarityMarker(kind, direction, center, radii, scale = 1, opacityScale = 1) {
   const material = kind === 'e' ? redMat.clone() : kind === 'm' ? blueMat.clone() : neutralMat.clone();
-  material.opacity = kind === 'n' ? .35 : .78;
+  material.opacity = (kind === 'n' ? .35 : .78) * opacityScale;
+  material.depthTest = kind === 'n';
   const group = new THREE.Group();
   const core = new THREE.Mesh(new THREE.SphereGeometry(.019, 12, 10), material);
   const halo = new THREE.Mesh(new THREE.TorusGeometry(.039, .0025, 6, 32), material.clone());
@@ -589,29 +624,192 @@ function makePolarityMarker(kind, direction, center, radii) {
   group.position.set(center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]);
   if (direction === 'left' || direction === 'right') halo.rotation.y = Math.PI / 2;
   if (direction === 'inside') { core.scale.setScalar(1.15); halo.scale.setScalar(.72); }
+  group.scale.setScalar(scale);
   group.add(core, halo);
   return group;
 }
-function updateFocusPolarity(part) {
-  focusElectricLayer.clear(); focusMagneticLayer.clear(); focusNeutralLayer.clear();
-  const zones = polarityZones[part.id];
-  if (!zones) return;
-  const centers = zones.centers || [part.target];
-  centers.forEach(center => {
-    zones.e.forEach(direction => focusElectricLayer.add(makePolarityMarker('e', direction, center, zones.radius)));
-    zones.m.forEach(direction => focusMagneticLayer.add(makePolarityMarker('m', direction, center, zones.radius)));
-    zones.n.forEach(direction => focusNeutralLayer.add(makePolarityMarker('n', direction, center, zones.radius)));
+
+function zoneInstances(part, zones) {
+  if (zones.instances) return zones.instances;
+  return (zones.centers || [part.target]).map(center => ({
+    center, e: zones.e, m: zones.m, n: zones.n
+  }));
+}
+
+function addInstanceMarkers(instance, radii, layers, scale = 1, opacityScale = 1) {
+  instance.e.forEach(direction => layers.e.add(makePolarityMarker('e', direction, instance.center, radii, scale, opacityScale)));
+  instance.m.forEach(direction => layers.m.add(makePolarityMarker('m', direction, instance.center, radii, scale, opacityScale)));
+  instance.n.forEach(direction => layers.n.add(makePolarityMarker('n', direction, instance.center, radii, scale, opacityScale)));
+}
+
+function clearGeneratedGroup(group) {
+  group.traverse(object => {
+    if (object === group) return;
+    object.geometry?.dispose();
+    if (Array.isArray(object.material)) object.material.forEach(material => material.dispose());
+    else object.material?.dispose();
   });
+  group.clear();
+}
+
+function addDipoleFilings(center, radius, hasElectric, hasMagnetic) {
+  const redSegments = [], blueSegments = [];
+  const loopCount = 8;
+  const shellCount = 3;
+  for (let plane = 0; plane < loopCount; plane++) {
+    const phi = plane / loopCount * Math.PI * 2;
+    for (let shell = 0; shell < shellCount; shell++) {
+      const loopRadius = radius * (1.25 + shell * .34);
+      const steps = 30;
+      for (let step = 1; step < steps - 2; step += 2) {
+        const theta = .18 + step / steps * (Math.PI - .36);
+        const theta2 = theta + (Math.PI - .36) / steps * .62;
+        const pointAt = angle => {
+          const radial = loopRadius * Math.sin(angle) ** 2;
+          return new THREE.Vector3(
+            radial * Math.cos(angle),
+            radial * Math.sin(angle) * Math.cos(phi),
+            radial * Math.sin(angle) * Math.sin(phi)
+          ).add(new THREE.Vector3(...center));
+        };
+        const output = theta < Math.PI / 2 ? redSegments : blueSegments;
+        output.push(...pointAt(theta), ...pointAt(theta2));
+      }
+    }
+  }
+  const createSegments = (positions, color, layer, phase) => {
+    if (!positions.length) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color, transparent: true, opacity: .42, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const filings = new THREE.LineSegments(geometry, material);
+    layer.add(filings);
+    focusFilingMaterials.push({ material, phase });
+  };
+  if (hasElectric && hasMagnetic) {
+    createSegments(redSegments, 0xff5347, focusElectricFilings, 0);
+    createSegments(blueSegments, 0x35aaff, focusMagneticFilings, Math.PI);
+  } else {
+    const kind = hasElectric ? 'e' : 'm';
+    const positions = [];
+    const directions = 72;
+    for (let i = 0; i < directions; i++) {
+      const u = (i + .5) / directions;
+      const phi = Math.acos(1 - 2 * u);
+      const theta = i * 2.399963;
+      const direction = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
+      const distance = radius * (1.05 + (i % 4) * .16);
+      const length = radius * (.14 + (i % 3) * .025);
+      const start = direction.clone().multiplyScalar(distance).add(new THREE.Vector3(...center));
+      const end = direction.clone().multiplyScalar(distance + length).add(new THREE.Vector3(...center));
+      positions.push(...start, ...end);
+    }
+    createSegments(
+      positions,
+      kind === 'e' ? 0xff5347 : 0x35aaff,
+      kind === 'e' ? focusElectricFilings : focusMagneticFilings,
+      kind === 'e' ? 0 : Math.PI
+    );
+  }
+}
+
+function rebuildFocusFilings(part) {
+  clearGeneratedGroup(focusElectricFilings);
+  clearGeneratedGroup(focusMagneticFilings);
+  focusFilingMaterials.length = 0;
+  const zones = polarityZones[part.id];
+  if (!zones || part.id === 'whole') return;
+  const instances = zoneInstances(part, zones);
+  instances.forEach(instance => {
+    const radius = Math.max(...zones.radius) * (instances.length > 1 ? 1.35 : 1.15);
+    addDipoleFilings(instance.center, radius, instance.e.length > 0, instance.m.length > 0);
+  });
+}
+
+function bodyWidthAt(y) {
+  if (y > 2.25) return .38;
+  if (y > 1.1) return .72;
+  if (y > -.45) return .58;
+  if (y > -2.5) return .42;
+  return .34;
+}
+
+function addHandednessFilings(kind, side) {
+  const positions = [];
+  for (let i = 0; i < 84; i++) {
+    const y = -3.25 + i / 83 * 6.4;
+    const width = bodyWidthAt(y);
+    const z = -.08 + Math.sin(i * 1.73) * .3;
+    const x = side * (width + .08 + (i % 4) * .035);
+    const slope = side * (kind === 'e' ? .07 : -.07);
+    positions.push(x - slope, y - .035, z, x + slope, y + .035, z + Math.sin(i) * .018);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: kind === 'e' ? 0xff4f43 : 0x2fa7ff,
+    transparent: true, opacity: .28, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const lines = new THREE.LineSegments(geometry, material);
+  (kind === 'e' ? wholeElectricLayer : wholeMagneticLayer).add(lines);
+  wholeFilingMaterials.push({ material, phase: kind === 'e' ? 0 : Math.PI });
+}
+
+function rebuildWholeField() {
+  clearGeneratedGroup(wholeElectricLayer);
+  clearGeneratedGroup(wholeMagneticLayer);
+  clearGeneratedGroup(wholeNeutralLayer);
+  wholeFilingMaterials.length = 0;
+  parts.filter(part => part.id !== 'whole').forEach(part => {
+    const zones = polarityZones[part.id];
+    if (!zones) return;
+    zoneInstances(part, zones).forEach(instance => {
+      addInstanceMarkers(instance, zones.radius, {
+        e: wholeElectricLayer, m: wholeMagneticLayer, n: wholeNeutralLayer
+      }, 1, .76);
+    });
+  });
+  const electricSide = handedness === 'right' ? -1 : 1;
+  addHandednessFilings('e', electricSide);
+  addHandednessFilings('m', -electricSide);
+}
+
+function updateFocusPolarity(part) {
+  clearGeneratedGroup(focusElectricLayer);
+  clearGeneratedGroup(focusMagneticLayer);
+  clearGeneratedGroup(focusNeutralLayer);
+  const zones = polarityZones[part.id];
+  if (!zones) {
+    rebuildFocusFilings(part);
+    return;
+  }
+  zoneInstances(part, zones).forEach(instance => {
+    addInstanceMarkers(instance, zones.radius, {
+      e: focusElectricLayer, m: focusMagneticLayer, n: focusNeutralLayer
+    });
+  });
+  rebuildFocusFilings(part);
 }
 
 let fieldScope = 'focus';
 function applyFieldScope() {
-  const focused = fieldScope === 'focus' && activePart !== 'whole';
-  electricGroup.children.forEach(child => { child.visible = child === focusElectricLayer ? focused : !focused; });
-  magneticGroup.children.forEach(child => { child.visible = child === focusMagneticLayer ? focused : !focused; });
-  focusNeutralLayer.visible = focused;
+  const showFocus = fieldScope === 'focus' && activePart !== 'whole';
+  const showWhole = !showFocus;
+  electricGroup.children.forEach(child => {
+    child.visible = child === focusElectricLayer || child === focusElectricFilings
+      ? showFocus
+      : child === wholeElectricLayer && showWhole;
+  });
+  magneticGroup.children.forEach(child => {
+    child.visible = child === focusMagneticLayer || child === focusMagneticFilings
+      ? showFocus
+      : child === wholeMagneticLayer && showWhole;
+  });
+  focusNeutralLayer.visible = showFocus;
+  wholeNeutralLayer.visible = showWhole;
 }
-
 function updateAnatomyFocus(partId) {
   if (!atlasSkin) return;
   const focused = fieldScope === 'focus' && partId !== 'whole';
@@ -623,7 +821,7 @@ function updateAnatomyFocus(partId) {
   Object.entries(anatomicalPartMeshes).forEach(([region, meshes]) => meshes.forEach(mesh => {
     const isEyeSurface = mesh.userData.permanent || eyeMeshes.includes(mesh);
     const isFocusedSurface = region === partId && (region !== 'ears' || mesh.userData.primaryFocus);
-    mesh.visible = focused ? (isFocusedSurface || isEyeSurface) : isEyeSurface;
+    mesh.visible = focused ? isFocusedSurface : isEyeSurface;
     if (!mesh.material) return;
     if (mesh.name === 'Tongue_FMA_54640' || mesh.name === 'MakeHuman_Tongue') mesh.material.opacity = focused && partId === 'mouth' ? .9 : .16;
     else if (!isEyeSurface) mesh.material.opacity = focused && region === partId ? .78 : .34;
@@ -693,6 +891,28 @@ document.querySelectorAll('.scope-switch button').forEach(button => button.addEv
   applyFieldScope();
   updateAnatomyFocus(activePart);
 }));
+function updateHandednessPresentation() {
+  const rightDominant = handedness === 'right';
+  const whole = parts[0];
+  whole.subtitle = rightDominant
+    ? '오른손잡이 · 인체 오른쪽 전기 / 왼쪽 자기'
+    : '왼손잡이 · 인체 왼쪽 전기 / 오른쪽 자기';
+  whole.flow = `전기 유체는 능동적 팽창, 자기 유체는 수동적 수축으로 설명됩니다. ${rightDominant ? '인체 오른쪽은 전기적이고 왼쪽은 자기적입니다.' : '인체 왼쪽은 전기적이고 오른쪽은 자기적입니다.'}`;
+  document.querySelector('#polarity-left').innerHTML = `<span></span>인체 오른쪽 · ${rightDominant ? '전기' : '자기'}`;
+  document.querySelector('#polarity-right').innerHTML = `인체 왼쪽 · ${rightDominant ? '자기' : '전기'}<span></span>`;
+  if (activePart === 'whole') selectPart('whole', false);
+}
+document.querySelectorAll('.handedness-switch button').forEach(button => button.addEventListener('click', () => {
+  handedness = button.dataset.handedness;
+  document.querySelectorAll('.handedness-switch button').forEach(item => {
+    const active = item === button;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-pressed', String(active));
+  });
+  rebuildWholeField();
+  applyFieldScope();
+  updateHandednessPresentation();
+}));
 
 document.querySelector('#reset-view').addEventListener('click', () => selectPart('whole'));
 document.querySelector('#rotate-view').addEventListener('click', (event) => {
@@ -759,9 +979,15 @@ function animate(now) {
     p.mesh.position.copy(p.curve.getPointAt(t));
     const pulse = .75 + Math.sin(elapsed * 5 + p.offset * 10) * .25; p.mesh.scale.setScalar(pulse);
   });
+  focusFilingMaterials.forEach(({ material, phase }) => {
+    material.opacity = .34 + Math.sin(elapsed * 2.8 + phase) * .12;
+  });
+  wholeFilingMaterials.forEach(({ material, phase }) => {
+    material.opacity = .22 + Math.sin(elapsed * 2.1 + phase) * .08;
+  });
   occultGroup.rotation.z = Math.sin(elapsed * .08) * .025;
   composer.render();
 }
 
-selectPart('whole', false);
+updateHandednessPresentation();
 requestAnimationFrame(animate);
