@@ -61,17 +61,17 @@ h1 em { color: var(--gold); font-style: italic; }
 .field-button.active.electric { border-color: rgba(255,74,61,.35); box-shadow: inset 0 0 20px rgba(255,74,61,.05); }
 .field-button.active.magnetic { border-color: rgba(49,168,255,.35); box-shadow: inset 0 0 20px rgba(49,168,255,.05); }
 .field-button.active.balance { border-color: rgba(184,108,255,.38); box-shadow: inset 0 0 20px rgba(184,108,255,.06); }
-.scope-switch, .handedness-switch, .body-profile-switch, .flow-layout-switch, .balance-mode-switch, .network-mode-switch, .ear-interpretation-switch { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; }
-.network-mode-switch { grid-template-columns: 1fr auto auto auto; }
+.scope-switch, .handedness-switch, .body-profile-switch, .flow-layout-switch, .balance-mode-switch, .network-mode-switch, .dominance-scope-switch, .ear-interpretation-switch { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; }
+.network-mode-switch, .dominance-scope-switch { grid-template-columns: 1fr auto auto auto; }
 .scope-switch { margin: -11px 0 6px; }
-.handedness-switch { margin: 0 0 6px; }
+.handedness-switch, .dominance-scope-switch { margin: 0 0 6px; }
 .body-profile-switch, .flow-layout-switch, .balance-mode-switch { margin: 0 0 6px; }
 .network-mode-switch { margin: 0 0 16px; }
 .ear-interpretation-switch { display: none; margin: -10px 0 16px; }
 .ear-interpretation-switch.visible { display: grid; }
-.scope-switch > span, .handedness-switch > span, .body-profile-switch > span, .flow-layout-switch > span, .balance-mode-switch > span, .network-mode-switch > span, .ear-interpretation-switch > span { color: #697679; font-size: 8px; letter-spacing: .08em; }
-.scope-switch button, .handedness-switch button, .body-profile-switch button, .flow-layout-switch button, .balance-mode-switch button, .network-mode-switch button, .ear-interpretation-switch button { padding: 5px 7px; border: 1px solid var(--line); background: transparent; color: #657276; font-size: 8px; transition: .2s; }
-.scope-switch button:hover, .scope-switch button.active, .handedness-switch button:hover, .handedness-switch button.active, .body-profile-switch button:hover, .body-profile-switch button.active, .flow-layout-switch button:hover, .flow-layout-switch button.active, .balance-mode-switch button:hover, .balance-mode-switch button.active, .network-mode-switch button:hover, .network-mode-switch button.active, .ear-interpretation-switch button:hover, .ear-interpretation-switch button.active { color: var(--gold); border-color: rgba(202,190,151,.42); background: rgba(202,190,151,.06); }
+.scope-switch > span, .handedness-switch > span, .body-profile-switch > span, .flow-layout-switch > span, .balance-mode-switch > span, .network-mode-switch > span, .dominance-scope-switch > span, .ear-interpretation-switch > span { color: #697679; font-size: 8px; letter-spacing: .08em; }
+.scope-switch button, .handedness-switch button, .body-profile-switch button, .flow-layout-switch button, .balance-mode-switch button, .network-mode-switch button, .dominance-scope-switch button, .ear-interpretation-switch button { padding: 5px 7px; border: 1px solid var(--line); background: transparent; color: #657276; font-size: 8px; transition: .2s; }
+.scope-switch button:hover, .scope-switch button.active, .handedness-switch button:hover, .handedness-switch button.active, .body-profile-switch button:hover, .body-profile-switch button.active, .flow-layout-switch button:hover, .flow-layout-switch button.active, .balance-mode-switch button:hover, .balance-mode-switch button.active, .network-mode-switch button:hover, .network-mode-switch button.active, .dominance-scope-switch button:hover, .dominance-scope-switch button.active, .ear-interpretation-switch button:hover, .ear-interpretation-switch button.active { color: var(--gold); border-color: rgba(202,190,151,.42); background: rgba(202,190,151,.06); }
 
 .part-heading { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .part-heading span { font: 500 11px 'Noto Sans KR'; }
@@ -182,7 +182,7 @@ dialog p { color: var(--muted); font-size: 11px; line-height: 1.8; }
   .left-panel { order: 2; border: 0; padding: 26px 18px; }
   .left-panel h1, .left-panel .intro { display: none; }
   .field-switch { margin-bottom: 16px; }
-  .scope-switch, .handedness-switch, .body-profile-switch, .flow-layout-switch, .balance-mode-switch, .network-mode-switch, .ear-interpretation-switch { max-width: 360px; }
+  .scope-switch, .handedness-switch, .body-profile-switch, .flow-layout-switch, .balance-mode-switch, .network-mode-switch, .dominance-scope-switch, .ear-interpretation-switch { max-width: 360px; }
   .part-list { display: flex; gap: 6px; overflow-x: auto; padding: 9px 0 2px; }
   .part-button { flex: 0 0 auto; width: auto; min-width: 98px; border: 1px solid var(--line); padding: 0 8px; }
   .part-button .dot { display: none; }

@@ -654,6 +654,7 @@ const polarityZones = {
 const neutralMat = new THREE.MeshBasicMaterial({ color: 0xcabe97, transparent: true, opacity: .42, depthWrite: false });
 const violetMat = new THREE.MeshBasicMaterial({ color: 0xb86cff, transparent: true, opacity: .72, blending: THREE.AdditiveBlending, depthWrite: false });
 let handedness = 'right';
+let dominanceScope = 'whole';
 let flowLayout = 'aggregate';
 let earInterpretation = 'surface';
 let balanceMode = 'distinct';
@@ -709,10 +710,64 @@ function makePolarityMarker(kind, direction, center, radii, scale = 1, opacitySc
 }
 
 function zoneInstances(part, zones) {
-  if (zones.instances) return zones.instances;
-  return (zones.centers || [part.target]).map(center => ({
+  const sourceInstances = zones.instances || (zones.centers || [part.target]).map(center => ({
     center, e: zones.e || [], m: zones.m || [], em: zones.em || [], n: zones.n || []
   }));
+  const instances = sourceInstances.map(instance => ({
+    center: instance.center, e: [...instance.e], m: [...instance.m], em: [...(instance.em || [])], n: [...instance.n]
+  }));
+
+  if (dominanceScope === 'hands' && part.id === 'hands') {
+    return instances.map(instance => {
+      const anatomicalSide = instance.center[0] < 0 ? 'right' : 'left';
+      const outerDirection = anatomicalSide === 'right' ? 'right' : 'left';
+      const dominant = anatomicalSide === handedness;
+      return { ...instance, e: dominant ? [outerDirection] : [], m: dominant ? [] : [outerDirection] };
+    });
+  }
+  if (dominanceScope === 'hands' && (part.id === 'right-fingers' || part.id === 'left-fingers')) {
+    const dominant = part.id.startsWith(handedness);
+    return instances.map(instance => ({ ...instance, e: dominant ? ['left','right'] : [], m: dominant ? [] : ['left','right'] }));
+  }
+  if (dominanceScope === 'all' && handedness === 'left') {
+    return instances.map(instance => ({ ...instance, e: instance.m, m: instance.e }));
+  }
+  return instances;
+}
+
+function displayedClassification(part) {
+  const zones = polarityZones[part.id];
+  if (!zones) return { electric: part.electric, magnetic: part.magnetic, electromagnetic: part.electromagnetic || 0, neutral: part.neutral };
+  const totals = zoneInstances(part, zones).reduce((sum, instance) => {
+    sum.electric += instance.e.length;
+    sum.magnetic += instance.m.length;
+    sum.electromagnetic += (instance.em || []).length;
+    sum.neutral += instance.n.length;
+    return sum;
+  }, { electric: 0, magnetic: 0, electromagnetic: 0, neutral: 0 });
+  const total = totals.electric + totals.magnetic + totals.electromagnetic + totals.neutral || 1;
+  Object.keys(totals).forEach(key => { totals[key] = Math.round(totals[key] / total * 1000) / 10; });
+  return totals;
+}
+
+function dominanceCopy(part) {
+  if (dominanceScope === 'hands' && ['hands','right-fingers','left-fingers'].includes(part.id)) {
+    const dominantName = handedness === 'right' ? '오른손' : '왼손';
+    const passiveName = handedness === 'right' ? '왼손' : '오른손';
+    return {
+      summary: `${part.summary} 손 우세 비교 보기에서는 자주 쓰는 ${dominantName}의 대표 극을 전기적으로, ${passiveName}의 대표 극을 자기적으로 표시합니다.`,
+      flow: `손 우세 비교: ${dominantName} 전기 발산 → ${passiveName} 자기 수렴. 중성 구획은 유지합니다.`,
+      subtitle: `${dominantName} 전기 / ${passiveName} 자기 · 비교 보기`
+    };
+  }
+  if (dominanceScope === 'all' && handedness === 'left' && part.id !== 'whole') {
+    return {
+      summary: `${part.summary} 부위 반전 비교 보기에서는 왼손잡이 조건에 따라 이 표의 전기와 자기 분류를 서로 교환합니다.`,
+      flow: `${part.flow} · 왼손잡이 부위 반전: 전기↔자기 교환.`,
+      subtitle: `${part.subtitle} · 왼손잡이 전기↔자기 반전`
+    };
+  }
+  return { summary: part.summary, flow: part.flow, subtitle: part.subtitle };
 }
 
 function configureEarInstances() {
@@ -1277,6 +1332,8 @@ let tween = null;
 function easeInOutCubic(t) { return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
 function selectPart(id, animate = true) {
   const part = parts.find(p => p.id === id) || parts[0];
+  const copy = dominanceCopy(part);
+  const classification = displayedClassification(part);
   activePart = part.id;
   const earSwitch = document.querySelector('.ear-interpretation-switch');
   const showEarInterpretation = part.id === 'ears';
@@ -1284,15 +1341,17 @@ function selectPart(id, animate = true) {
   earSwitch.setAttribute('aria-hidden', String(!showEarInterpretation));
   document.querySelectorAll('.part-button').forEach(b => b.classList.toggle('active', b.dataset.part === part.id));
   ui.number.textContent = part.number; ui.symbol.textContent = part.symbol; ui.latin.textContent = part.latin;
-  ui.title.textContent = part.name; ui.summary.textContent = part.summary; ui.flow.textContent = part.flow;
-  const electromagnetic = part.electromagnetic || 0;
-  ui.electric.textContent = part.electric; ui.magnetic.textContent = part.magnetic; ui.electromagnetic.textContent = electromagnetic; ui.neutral.textContent = part.neutral;
-  ui.electricRatio.style.width = `${part.electric}%`; ui.magneticRatio.style.width = `${part.magnetic}%`; ui.electromagneticRatio.style.width = `${electromagnetic}%`; ui.neutralRatio.style.width = `${part.neutral}%`;
-  ui.element.textContent = part.element; ui.action.textContent = part.action; ui.glyph.textContent = part.symbol;
+  ui.title.textContent = part.name; ui.summary.textContent = copy.summary; ui.flow.textContent = copy.flow;
+  ui.electric.textContent = classification.electric; ui.magnetic.textContent = classification.magnetic; ui.electromagnetic.textContent = classification.electromagnetic; ui.neutral.textContent = classification.neutral;
+  ui.electricRatio.style.width = `${classification.electric}%`; ui.magneticRatio.style.width = `${classification.magnetic}%`; ui.electromagneticRatio.style.width = `${classification.electromagnetic}%`; ui.neutralRatio.style.width = `${classification.neutral}%`;
+  const dominanceAltersPart = (dominanceScope === 'hands' && ['hands','right-fingers','left-fingers'].includes(part.id)) || (dominanceScope === 'all' && handedness === 'left' && part.id !== 'whole');
+  ui.element.textContent = part.element;
+  ui.action.textContent = dominanceAltersPart ? `전기 ${classification.electric} / 자기 ${classification.magnetic} / 중성 ${classification.neutral}` : part.action;
+  ui.glyph.textContent = part.symbol;
   const flowDiagram = document.querySelector('.flow-diagram');
-  flowDiagram.classList.toggle('has-balance', part.neutral > 0 || electromagnetic > 0);
+  flowDiagram.classList.toggle('has-balance', classification.neutral > 0 || classification.electromagnetic > 0);
   flowDiagram.classList.toggle('purple-balance', balanceMode === 'purple');
-  ui.focus.innerHTML = `<span class="focus-index">${part.number}</span><span><b>${part.name}</b><small>${part.subtitle}</small></span>`;
+  ui.focus.innerHTML = `<span class="focus-index">${part.number}</span><span><b>${part.name}</b><small>${copy.subtitle}</small></span>`;
   ui.focus.classList.remove('visible'); requestAnimationFrame(() => ui.focus.classList.add('visible'));
   updateFocusPolarity(part);
   applyFieldScope();
@@ -1345,6 +1404,18 @@ document.querySelectorAll('.handedness-switch button').forEach(button => button.
   rebuildWholeField();
   applyFieldScope();
   updateHandednessPresentation();
+  if (activePart !== 'whole') selectPart(activePart, false);
+}));
+document.querySelectorAll('.dominance-scope-switch button').forEach(button => button.addEventListener('click', () => {
+  dominanceScope = button.dataset.dominanceScope;
+  document.querySelectorAll('.dominance-scope-switch button').forEach(item => {
+    const active = item === button;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-pressed', String(active));
+  });
+  rebuildWholeField();
+  selectPart(activePart, false);
+  applyFieldScope();
 }));
 document.querySelectorAll('.body-profile-switch button').forEach(button => button.addEventListener('click', async () => {
   if (bodyProfile === button.dataset.bodyProfile) return;
