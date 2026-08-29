@@ -9,6 +9,7 @@
   --muted: #89969a;
   --red: #ff4a3d;
   --blue: #31a8ff;
+  --violet: #b86cff;
 }
 
 * { box-sizing: border-box; }
@@ -46,27 +47,31 @@ h1 { margin: 8px 0 12px; font: 500 34px/1.12 'Cormorant Garamond', 'Noto Sans KR
 h1 em { color: var(--gold); font-style: italic; }
 .intro { color: var(--muted); font-size: 11px; line-height: 1.8; margin: 0 0 20px; word-break: keep-all; }
 
-.field-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 22px; }
-.field-button { position: relative; min-height: 57px; display: grid; grid-template-columns: 29px 1fr; align-items: center; text-align: left; border: 1px solid var(--line); background: rgba(255,255,255,.015); padding: 8px; overflow: hidden; opacity: .5; transition: .25s; }
+.field-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 22px; }
+.field-button { position: relative; min-height: 57px; display: grid; grid-template-columns: 22px 1fr; align-items: center; text-align: left; border: 1px solid var(--line); background: rgba(255,255,255,.015); padding: 6px; overflow: hidden; opacity: .5; transition: .25s; }
 .field-button.active { opacity: 1; }
 .field-button:hover { background: rgba(255,255,255,.04); }
-.field-button .field-icon { font: 24px 'Cormorant Garamond'; }
+.field-button .field-icon { font: 21px 'Cormorant Garamond'; }
 .field-button.electric .field-icon, .field-button.electric small { color: var(--red); }
 .field-button.magnetic .field-icon, .field-button.magnetic small { color: var(--blue); }
+.field-button.balance .field-icon, .field-button.balance small { color: var(--violet); }
 .field-button b, .field-button small { display: block; font-size: 10px; font-weight: 500; }
 .field-button small { margin-top: 3px; font-size: 8px; letter-spacing: .04em; opacity: .8; }
 .field-button i { position: absolute; top: 0; right: 0; width: 10px; height: 10px; border-top: 1px solid currentColor; border-right: 1px solid currentColor; opacity: .3; }
 .field-button.active.electric { border-color: rgba(255,74,61,.35); box-shadow: inset 0 0 20px rgba(255,74,61,.05); }
 .field-button.active.magnetic { border-color: rgba(49,168,255,.35); box-shadow: inset 0 0 20px rgba(49,168,255,.05); }
-.scope-switch, .handedness-switch, .flow-layout-switch, .ear-interpretation-switch { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; }
+.field-button.active.balance { border-color: rgba(184,108,255,.38); box-shadow: inset 0 0 20px rgba(184,108,255,.06); }
+.scope-switch, .handedness-switch, .body-profile-switch, .flow-layout-switch, .balance-mode-switch, .network-mode-switch, .ear-interpretation-switch { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; }
+.network-mode-switch { grid-template-columns: 1fr auto auto auto; }
 .scope-switch { margin: -11px 0 6px; }
 .handedness-switch { margin: 0 0 6px; }
-.flow-layout-switch { margin: 0 0 16px; }
+.body-profile-switch, .flow-layout-switch, .balance-mode-switch { margin: 0 0 6px; }
+.network-mode-switch { margin: 0 0 16px; }
 .ear-interpretation-switch { display: none; margin: -10px 0 16px; }
 .ear-interpretation-switch.visible { display: grid; }
-.scope-switch > span, .handedness-switch > span, .flow-layout-switch > span, .ear-interpretation-switch > span { color: #697679; font-size: 8px; letter-spacing: .08em; }
-.scope-switch button, .handedness-switch button, .flow-layout-switch button, .ear-interpretation-switch button { padding: 5px 7px; border: 1px solid var(--line); background: transparent; color: #657276; font-size: 8px; transition: .2s; }
-.scope-switch button:hover, .scope-switch button.active, .handedness-switch button:hover, .handedness-switch button.active, .flow-layout-switch button:hover, .flow-layout-switch button.active, .ear-interpretation-switch button:hover, .ear-interpretation-switch button.active { color: var(--gold); border-color: rgba(202,190,151,.42); background: rgba(202,190,151,.06); }
+.scope-switch > span, .handedness-switch > span, .body-profile-switch > span, .flow-layout-switch > span, .balance-mode-switch > span, .network-mode-switch > span, .ear-interpretation-switch > span { color: #697679; font-size: 8px; letter-spacing: .08em; }
+.scope-switch button, .handedness-switch button, .body-profile-switch button, .flow-layout-switch button, .balance-mode-switch button, .network-mode-switch button, .ear-interpretation-switch button { padding: 5px 7px; border: 1px solid var(--line); background: transparent; color: #657276; font-size: 8px; transition: .2s; }
+.scope-switch button:hover, .scope-switch button.active, .handedness-switch button:hover, .handedness-switch button.active, .body-profile-switch button:hover, .body-profile-switch button.active, .flow-layout-switch button:hover, .flow-layout-switch button.active, .balance-mode-switch button:hover, .balance-mode-switch button.active, .network-mode-switch button:hover, .network-mode-switch button.active, .ear-interpretation-switch button:hover, .ear-interpretation-switch button.active { color: var(--gold); border-color: rgba(202,190,151,.42); background: rgba(202,190,151,.06); }
 
 .part-heading { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .part-heading span { font: 500 11px 'Noto Sans KR'; }
@@ -110,15 +115,17 @@ h1 em { color: var(--gold); font-style: italic; }
 .right-panel h2 { margin: 8px 0 11px; font: 500 28px 'Cormorant Garamond', 'Noto Sans KR'; }
 .detail-summary { color: #9ba5a6; font-size: 11px; line-height: 1.85; margin: 0 0 21px; min-height: 61px; word-break: keep-all; }
 .ratio-card { border: 1px solid var(--line); padding: 12px; background: rgba(255,255,255,.012); }
-.ratio-labels { display: flex; justify-content: space-between; font-size: 8px; color: var(--muted); }
+.ratio-labels { display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; font-size: 7px; color: var(--muted); }
 .ratio-labels b { font: 12px 'Cormorant Garamond'; margin-left: 3px; }
-.ratio-labels span:first-child b { color: var(--red); }.ratio-labels span:last-child b { color: var(--blue); }
+.ratio-labels span:first-child b { color: var(--red); }
 .ratio-labels span:nth-child(2) b { color: var(--blue); }
-.ratio-labels span:nth-child(3) b { color: #a9a491; }
+.ratio-labels span:nth-child(3) b { color: var(--violet); }
+.ratio-labels span:nth-child(4) b { color: #c7bb91; }
 .ratio-track { display: flex; gap: 3px; height: 2px; margin-top: 9px; }
 .ratio-track i { display: block; transition: width .55s cubic-bezier(.2,.8,.2,1); }
 #electric-ratio { background: var(--red); box-shadow: 0 0 7px var(--red); }
 #magnetic-ratio { background: var(--blue); box-shadow: 0 0 7px var(--blue); }
+#electromagnetic-ratio { background: linear-gradient(90deg, var(--red), var(--violet), var(--blue)); box-shadow: 0 0 6px rgba(184,108,255,.7); }
 #neutral-ratio { background: #8e8a7c; box-shadow: 0 0 5px rgba(202,190,151,.4); }
 .ratio-note { display: block; margin-top: 8px; color: #596569; font-size: 7px; letter-spacing: .02em; }
 .flow-section { padding: 20px 0 17px; border-bottom: 1px solid var(--line); }
@@ -129,6 +136,9 @@ h1 em { color: var(--gold); font-style: italic; }
 .flow-orbit { position: absolute; width: 105px; height: 42px; border: 1px solid; border-radius: 50%; animation: orbitPulse 2.4s ease-in-out infinite; }
 .flow-orbit.red { border-color: rgba(255,74,61,.55); transform: rotate(15deg); color: var(--red); }
 .flow-orbit.blue { border-color: rgba(49,168,255,.55); transform: rotate(-15deg); color: var(--blue); animation-delay: -1.2s; }
+.flow-orbit.balance { visibility: hidden; width: 76px; height: 62px; border-color: rgba(202,190,151,.55); color: var(--gold); transform: rotate(90deg); animation-delay: -.6s; }
+.flow-diagram.has-balance .flow-orbit.balance { visibility: visible; }
+.flow-diagram.purple-balance .flow-orbit.balance { border-color: rgba(184,108,255,.72); color: var(--violet); }
 .flow-orbit i { position: absolute; left: 16%; top: 1px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
 @keyframes orbitPulse { 0%,100% { opacity:.45; width: 94px; } 50% { opacity:1; width: 120px; } }
 .correspondence { display: grid; grid-template-columns: 1fr 1fr; padding: 16px 0; border-bottom: 1px solid var(--line); }
@@ -172,7 +182,7 @@ dialog p { color: var(--muted); font-size: 11px; line-height: 1.8; }
   .left-panel { order: 2; border: 0; padding: 26px 18px; }
   .left-panel h1, .left-panel .intro { display: none; }
   .field-switch { margin-bottom: 16px; }
-  .scope-switch, .handedness-switch, .flow-layout-switch, .ear-interpretation-switch { max-width: 360px; }
+  .scope-switch, .handedness-switch, .body-profile-switch, .flow-layout-switch, .balance-mode-switch, .network-mode-switch, .ear-interpretation-switch { max-width: 360px; }
   .part-list { display: flex; gap: 6px; overflow-x: auto; padding: 9px 0 2px; }
   .part-button { flex: 0 0 auto; width: auto; min-width: 98px; border: 1px solid var(--line); padding: 0 8px; }
   .part-button .dot { display: none; }
